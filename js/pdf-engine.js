@@ -1,5 +1,6 @@
 /**
  * PDF Engine - Render PDF pages using PDF.js
+ * FIXED: Preserve text boxes and other annotations when re-rendering (zoom/scale change)
  */
 class PDFEngine {
     constructor(containerId) {
@@ -11,6 +12,11 @@ class PDFEngine {
         this.pageWrappers = [];
         this.onPageRendered = null;
         this.currentDataUrl = null;
+        // NEW: Callback to save/restore annotations before/after re-render
+        this.onBeforeRender = null;
+        this.onAfterRender = null;
+        // NEW: Flag to track if we're in the middle of re-rendering
+        this.isReRendering = false;
     }
 
     async loadPDF(dataUrl) {
@@ -45,6 +51,12 @@ class PDFEngine {
             this.pdfDoc = await loadingTask.promise;
             this.totalPages = this.pdfDoc.numPages;
 
+            // FIXED: Save annotations before clearing if re-rendering (zoom change)
+            let savedAnnotations = null;
+            if (this.isReRendering && this.onBeforeRender) {
+                savedAnnotations = this.onBeforeRender();
+            }
+
             this.container.innerHTML = '';
             this.pageWrappers = [];
 
@@ -53,10 +65,20 @@ class PDFEngine {
                 await this.renderPage(i);
             }
 
+            // FIXED: Restore annotations after re-rendering
+            if (this.isReRendering && this.onAfterRender && savedAnnotations) {
+                // Small delay to ensure DOM is ready
+                setTimeout(() => {
+                    this.onAfterRender(savedAnnotations);
+                }, 50);
+            }
+
+            this.isReRendering = false;
             return true;
         } catch (error) {
             console.error('Error loading PDF:', error);
             this.container.innerHTML = '<div class="loading">❌ Gagal memuat PDF.<br><small>' + error.message + '</small><br><br><button class="btn-primary" onclick="location.reload()">Coba Lagi</button></div>';
+            this.isReRendering = false;
             return false;
         }
     }
@@ -129,6 +151,8 @@ class PDFEngine {
     setScale(newScale) {
         this.scale = newScale;
         if (this.pdfDoc && this.currentDataUrl) {
+            // FIXED: Set flag before re-rendering
+            this.isReRendering = true;
             this.loadPDF(this.currentDataUrl);
         }
     }
