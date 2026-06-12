@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Editor - Upload</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+</head>
+<body>
+    <div class="upload-container">
+        <div class="upload-card">
+            <div class="logo">📄 PDF Editor</div>
+            <h1>Edit PDF dengan Mudah</h1>
+            <p>Upload PDF Anda untuk mulai mengedit</p>
+
+            <div class="upload-zone" id="uploadZone">
+                <div class="upload-icon">📁</div>
+                <p>Drag & drop PDF di sini</p>
+                <p>atau</p>
+                <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                    Pilih File PDF
+                </button>
+                <input type="file" id="fileInput" accept=".pdf" hidden>
+            </div>
+
+            <div class="features">
+                <div class="feature-item">⬛ Tutup/Sensor Teks</div>
+                <div class="feature-item">📝 Tambah Teks</div>
+                <div class="feature-item">🖼️ Tambah Gambar</div>
+                <div class="feature-item">🖍️ Highlight</div>
+                <div class="feature-item">✍️ Tanda Tangan</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Polyfill Promise.withResolvers for older browsers
+        if (typeof Promise.withResolvers === 'undefined') {
+            Promise.withResolvers = function() {
+                let resolve, reject;
+                const promise = new Promise((res, rej) => {
+                    resolve = res;
+                    reject = rej;
+                });
+                return { promise, resolve, reject };
+            };
+        }
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+
+        // Drag & drop
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') {
+                handleFile(files[0]);
+            } else {
+                alert('Harap upload file PDF!');
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            // Show loading
+            uploadZone.innerHTML = '<div class="loading"><div class="spinner"></div>Memproses PDF...</div>';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    // Convert ArrayBuffer to base64
+                    const bytes = new Uint8Array(e.target.result);
+                    let binary = '';
+                    for (let i = 0; i < bytes.byteLength; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    const base64 = btoa(binary);
+                    const dataUrl = 'data:application/pdf;base64,' + base64;
+
+                    // Store in sessionStorage (more reliable than localStorage for large data)
+                    sessionStorage.setItem('pdfData', dataUrl);
+                    sessionStorage.setItem('pdfName', file.name);
+
+                    // Also try localStorage as fallback
+                    try {
+                        localStorage.setItem('pdfData', dataUrl);
+                        localStorage.setItem('pdfName', file.name);
+                    } catch (e) {
+                        console.warn('localStorage full, using sessionStorage');
+                    }
+
+                    window.location.href = 'editor.html';
+                } catch (err) {
+                    console.error('Error processing file:', err);
+                    alert('Gagal memproses file: ' + err.message);
+                    location.reload();
+                }
+            };
+            reader.onerror = () => {
+                alert('Gagal membaca file PDF');
+                location.reload();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
