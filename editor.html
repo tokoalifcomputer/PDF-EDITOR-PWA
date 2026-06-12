@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Editor</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+</head>
+<body class="editor-page">
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="logo">📄</div>
+        <span class="file-name" id="fileName">document.pdf</span>
+
+        <button class="btn" id="btnUndo" onclick="editor.undo()" disabled>
+            ↩️ Undo
+        </button>
+        <button class="btn" id="btnRedo" onclick="editor.redo()" disabled>
+            ↪️ Redo
+        </button>
+
+        <div class="toolbar-separator"></div>
+
+        <div class="zoom-controls">
+            <button class="btn" onclick="editor.zoomOut()">−</button>
+            <span class="zoom-value" id="zoomValue">150%</span>
+            <button class="btn" onclick="editor.zoomIn()">+</button>
+        </div>
+
+        <div class="toolbar-separator"></div>
+
+        <div class="page-info">
+            <button onclick="editor.prevPage()">◀</button>
+            <span id="pageInfo">Halaman 1 / 1</span>
+            <button onclick="editor.nextPage()">▶</button>
+        </div>
+
+        <div class="toolbar-separator"></div>
+
+        <button class="btn" onclick="editor.rotateCropTool.openRotateModal()">🔄 Putar</button>
+        <button class="btn" onclick="editor.rotateCropTool.openCropModal()">✂️ Crop</button>
+
+        <div class="toolbar-separator"></div>
+
+        <button class="btn" onclick="editor.mergeSplitTool.openMergeModal()">📑 Gabung</button>
+        <button class="btn" onclick="editor.mergeSplitTool.openSplitModal()">✂️ Pisah</button>
+
+        <div class="toolbar-separator"></div>
+
+        <button class="btn btn-success" onclick="editor.exportPDF()">
+            💾 Simpan PDF
+        </button>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar" id="toolbar">
+        <!-- Mode Selection -->
+        <div class="toolbar-section">
+            <span class="toolbar-label">Mode</span>
+            <button class="btn active" id="btnModeRedact" onclick="editor.setMode('redact')">
+                ⬛ Redact
+            </button>
+            <button class="btn" id="btnModeHighlight" onclick="editor.setMode('highlight')">
+                🖍️ Highlight
+            </button>
+            <button class="btn" id="btnModeImage" onclick="editor.setMode('image')">
+                🖼️ Image
+            </button>
+            <button class="btn" id="btnModeSignature" onclick="editor.setMode('signature')">
+                ✍️ Sign
+            </button>
+            <button class="btn" id="btnModeText" onclick="editor.setMode('text')" disabled>
+                📝 Text
+            </button>
+        </div>
+
+        <div class="toolbar-separator"></div>
+
+        <!-- Redact Tools -->
+        <div class="toolbar-section" id="redactTools">
+            <span class="toolbar-label">Warna</span>
+            <div class="color-picker-wrapper">
+                <input type="color" id="colorPicker" value="#FFFFFF" onchange="editor.setRedactColor(this.value)">
+                <span class="color-value" id="colorValue">#FFFFFF</span>
+            </div>
+
+            <div class="toolbar-separator"></div>
+
+            <button class="btn btn-danger" onclick="editor.deleteSelectedRedaction()">
+                🗑️ Hapus
+            </button>
+
+            <div class="toolbar-separator"></div>
+
+            <button class="btn btn-success" id="btnFinishRedact" onclick="editor.finishRedaction()">
+                ✅ Selesai Redact
+            </button>
+        </div>
+
+        <!-- Highlight Tools (hidden initially) -->
+        <div class="toolbar-section" id="highlightTools" style="display:none;">
+            <span class="toolbar-label">Warna</span>
+            <div class="color-picker-wrapper">
+                <input type="color" id="highlightColorPicker" value="#FFFF00" onchange="editor.setHighlightColor(this.value)">
+            </div>
+            <span class="toolbar-label">Opasitas</span>
+            <input type="range" id="highlightOpacity" min="10" max="80" value="40" 
+                   style="width: 80px;" oninput="editor.setHighlightOpacity(this.value / 100)">
+            <span id="opacityValue" style="font-size: 12px; color: var(--gray-500); min-width: 36px;">40%</span>
+
+            <div class="toolbar-separator"></div>
+
+            <button class="btn btn-danger" onclick="editor.deleteSelectedHighlight()">
+                🗑️ Hapus
+            </button>
+        </div>
+
+        <!-- Image Tools (hidden initially) -->
+        <div class="toolbar-section" id="imageTools" style="display:none;">
+            <button class="btn btn-primary" onclick="editor.imageTool.openImageUpload()">
+                📤 Upload Gambar
+            </button>
+            <button class="btn btn-danger" onclick="editor.deleteSelectedImage()">
+                🗑️ Hapus
+            </button>
+        </div>
+
+        <!-- Signature Tools (hidden initially) -->
+        <div class="toolbar-section" id="signatureTools" style="display:none;">
+            <button class="btn btn-primary" onclick="editor.signatureTool.openSignaturePad()">
+                ✍️ Buat Tanda Tangan
+            </button>
+            <button class="btn btn-danger" onclick="editor.deleteSelectedSignature()">
+                🗑️ Hapus
+            </button>
+        </div>
+
+        <!-- Text Tools (hidden initially) -->
+        <div class="toolbar-section" id="textTools" style="display:none;">
+            <span class="toolbar-label">Font</span>
+            <select class="btn" id="fontFamily" onchange="editor.setTextFont(this.value)" style="min-width: 120px;">
+                <option value="Arial, sans-serif">Arial</option>
+                <option value="'Times New Roman', serif">Times New Roman</option>
+                <option value="'Courier New', monospace">Courier New</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="Verdana, sans-serif">Verdana</option>
+                <option value="Impact, sans-serif">Impact</option>
+                <option value="'Comic Sans MS', cursive">Comic Sans</option>
+            </select>
+
+            <span class="toolbar-label">Ukuran</span>
+            <select class="btn" id="fontSize" onchange="editor.setTextSize(this.value)">
+                <option value="8">8px</option>
+                <option value="10">10px</option>
+                <option value="12">12px</option>
+                <option value="14">14px</option>
+                <option value="16" selected>16px</option>
+                <option value="18">18px</option>
+                <option value="20">20px</option>
+                <option value="24">24px</option>
+                <option value="32">32px</option>
+                <option value="48">48px</option>
+                <option value="64">64px</option>
+            </select>
+
+            <span class="toolbar-label">Warna</span>
+            <div class="color-picker-wrapper">
+                <input type="color" id="textColorPicker" value="#000000" onchange="editor.setTextColor(this.value)">
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Viewer -->
+    <div class="viewer-container" id="viewerContainer">
+        <div class="loading">
+            <div class="spinner"></div>
+            Memuat PDF...
+        </div>
+    </div>
+
+    <!-- Mode Indicator -->
+    <div class="mode-indicator" id="modeIndicator">
+        <div class="dot"></div>
+        <span id="modeText">Mode: Redact - Klik-drag untuk membuat kotak</span>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        if (typeof Promise.withResolvers === 'undefined') {
+            Promise.withResolvers = function() {
+                let resolve, reject;
+                const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+                return { promise, resolve, reject };
+            };
+        }
+    </script>
+
+    <script src="js/history.js"></script>
+    <script src="js/pdf-engine.js"></script>
+    <script src="js/redaction-tool.js"></script>
+    <script src="js/highlight-tool.js"></script>
+    <script src="js/image-tool.js"></script>
+    <script src="js/signature-tool.js"></script>
+    <script src="js/text-tool.js"></script>
+    <script src="js/rotate-crop-tool.js"></script>
+    <script src="js/merge-split-tool.js"></script>
+    <script src="js/export.js"></script>
+
+    <script>
+        class PDFEditor {
+            constructor() {
+                this.isRedactMode = true;
+                this.isHighlightMode = false;
+                this.isImageMode = false;
+                this.isSignatureMode = false;
+                this.isTextMode = false;
+                this.redactFinished = false;
+                this.textSize = 16;
+                this.textColor = '#000000';
+                this.textFont = 'Arial, sans-serif';
+
+                this.history = new HistoryManager();
+                this.pdfEngine = new PDFEngine('viewerContainer');
+                this.redactionTool = new RedactionTool(this);
+                this.highlightTool = new HighlightTool(this);
+                this.imageTool = new ImageTool(this);
+                this.signatureTool = new SignatureTool(this);
+                this.textTool = new TextTool(this);
+                this.rotateCropTool = new RotateCropTool(this);
+                this.mergeSplitTool = new MergeSplitTool(this);
+                this.exporter = new PDFExporter();
+
+                this.init();
+            }
+
+            init() {
+                let pdfData = sessionStorage.getItem('pdfData');
+                let pdfName = sessionStorage.getItem('pdfName');
+
+                if (!pdfData) {
+                    pdfData = localStorage.getItem('pdfData');
+                    pdfName = localStorage.getItem('pdfName');
+                }
+
+                if (!pdfData) {
+                    window.location.href = 'index.html';
+                    return;
+                }
+
+                document.getElementById('fileName').textContent = pdfName || 'document.pdf';
+
+                this.pdfEngine.onPageRendered = (wrapper, pageNum) => {
+                    this.redactionTool.createLayer(wrapper, pageNum);
+                    this.highlightTool.createLayer(wrapper, pageNum);
+                    this.imageTool.createLayer(wrapper, pageNum);
+                    this.signatureTool.createLayer(wrapper, pageNum);
+                    this.textTool.createLayer(wrapper, pageNum);
+                };
+
+                this.pdfEngine.loadPDF(pdfData).then(success => {
+                    if (success) {
+                        this.updatePageInfo();
+                        this.redactionTool.setActive(true);
+                    }
+                }).catch(err => {
+                    console.error('PDF load error:', err);
+                    document.getElementById('viewerContainer').innerHTML = 
+                        '<div class="loading">❌ Gagal memuat PDF.<br><small>' + err.message + '</small><br><br><button class="btn-primary" onclick="location.reload()">Coba Lagi</button></div>';
+                });
+
+                document.addEventListener('keydown', (e) => this.onKeyDown(e));
+                this.updateZoomDisplay();
+            }
+
+            setMode(mode) {
+                this.isRedactMode = false;
+                this.isHighlightMode = false;
+                this.isImageMode = false;
+                this.isSignatureMode = false;
+                this.isTextMode = false;
+
+                this.redactionTool.setActive(false);
+                this.highlightTool.setActive(false);
+                this.imageTool.setActive(false);
+                this.signatureTool.setActive(false);
+                this.textTool.setActive(false);
+
+                document.getElementById('redactTools').style.display = 'none';
+                document.getElementById('highlightTools').style.display = 'none';
+                document.getElementById('imageTools').style.display = 'none';
+                document.getElementById('signatureTools').style.display = 'none';
+                document.getElementById('textTools').style.display = 'none';
+
+                document.querySelectorAll('[id^="btnMode"]').forEach(btn => btn.classList.remove('active'));
+
+                let modeText = '';
+
+                switch (mode) {
+                    case 'redact':
+                        this.isRedactMode = true;
+                        if (!this.redactFinished) this.redactionTool.setActive(true);
+                        document.getElementById('redactTools').style.display = 'flex';
+                        document.getElementById('btnModeRedact').classList.add('active');
+                        modeText = this.redactFinished ? 'Mode: Redact (Locked)' : 'Mode: Redact - Klik-drag untuk membuat kotak';
+                        break;
+                    case 'highlight':
+                        this.isHighlightMode = true;
+                        this.highlightTool.setActive(true);
+                        document.getElementById('highlightTools').style.display = 'flex';
+                        document.getElementById('btnModeHighlight').classList.add('active');
+                        modeText = 'Mode: Highlight - Klik-drag untuk menyorot teks';
+                        break;
+                    case 'image':
+                        this.isImageMode = true;
+                        this.imageTool.setActive(true);
+                        document.getElementById('imageTools').style.display = 'flex';
+                        document.getElementById('btnModeImage').classList.add('active');
+                        modeText = 'Mode: Image - Upload gambar lalu klik di PDF';
+                        break;
+                    case 'signature':
+                        this.isSignatureMode = true;
+                        this.signatureTool.setActive(true);
+                        document.getElementById('signatureTools').style.display = 'flex';
+                        document.getElementById('btnModeSignature').classList.add('active');
+                        modeText = 'Mode: Signature - Buat tanda tangan lalu klik di PDF';
+                        break;
+                    case 'text':
+                        if (!this.redactFinished) {
+                            alert('Selesaikan mode Redact terlebih dahulu!');
+                            this.setMode('redact');
+                            return;
+                        }
+                        this.isTextMode = true;
+                        this.textTool.setActive(true);
+                        document.getElementById('textTools').style.display = 'flex';
+                        document.getElementById('btnModeText').classList.add('active');
+                        modeText = 'Mode: Text - Klik di PDF untuk menambah teks';
+                        break;
+                }
+
+                document.getElementById('modeText').textContent = modeText;
+            }
+
+            finishRedaction() {
+                if (this.redactionTool.boxes.length === 0) {
+                    if (!confirm('Belum ada kotak redaction. Lanjutkan?')) return;
+                }
+
+                this.redactFinished = true;
+                this.redactionTool.lockAll();
+                this.highlightTool.lockAll();
+                this.imageTool.lockAll();
+                this.signatureTool.lockAll();
+
+                document.getElementById('btnModeText').disabled = false;
+                document.getElementById('btnFinishRedact').style.display = 'none';
+
+                this.showModal(
+                    'Redaction Selesai',
+                    `${this.redactionTool.boxes.length} kotak redaction telah dikunci.`,
+                    [
+                        { text: 'Lanjutkan Edit', action: () => {} },
+                        { text: 'Ke Mode Text', action: () => this.setMode('text'), primary: true }
+                    ]
+                );
+            }
+
+            setRedactColor(color) {
+                this.redactionTool.setColor(color);
+                document.getElementById('colorValue').textContent = color.toUpperCase();
+            }
+            deleteSelectedRedaction() {
+                this.redactionTool.deleteSelected();
+            }
+
+            setHighlightColor(color) {
+                this.highlightTool.setColor(color);
+            }
+            setHighlightOpacity(opacity) {
+                this.highlightTool.setOpacity(opacity);
+                document.getElementById('opacityValue').textContent = Math.round(opacity * 100) + '%';
+            }
+            deleteSelectedHighlight() {
+                this.highlightTool.deleteSelected();
+            }
+
+            deleteSelectedImage() {
+                this.imageTool.deleteSelected();
+            }
+
+            deleteSelectedSignature() {
+                this.signatureTool.deleteSelected();
+            }
+
+            // Text toolbar methods
+            setTextFont(font) {
+                this.textFont = font;
+                this.textTool.setFontFamily(font);
+            }
+
+            setTextSize(size) {
+                this.textSize = parseInt(size);
+                this.textTool.setFontSize(this.textSize);
+            }
+
+            setTextColor(color) {
+                this.textColor = color;
+                this.textTool.setColor(color);
+            }
+
+            // Update toolbar when text is selected
+            updateTextToolbar(text) {
+                if (!text) return;
+                document.getElementById('fontFamily').value = text.fontFamily || 'Arial, sans-serif';
+                document.getElementById('fontSize').value = text.fontSize || 16;
+                document.getElementById('textColorPicker').value = text.color || '#000000';
+            }
+
+            undo() {
+                const action = this.history.undo();
+                if (!action) return;
+                this.applyHistoryAction(action, true);
+            }
+
+            redo() {
+                const action = this.history.redo();
+                if (!action) return;
+                this.applyHistoryAction(action, false);
+            }
+
+            applyHistoryAction(action, isUndo) {
+                switch (action.targetType) {
+                    case 'redaction': this.redactionTool.applyHistoryAction(action, isUndo); break;
+                    case 'highlight': this.highlightTool.applyHistoryAction(action, isUndo); break;
+                    case 'image': this.imageTool.applyHistoryAction(action, isUndo); break;
+                    case 'signature': this.signatureTool.applyHistoryAction(action, isUndo); break;
+                    case 'text': this.textTool.applyHistoryAction(action, isUndo); break;
+                    case 'page': this.rotateCropTool.applyHistoryAction(action, isUndo); break;
+                }
+            }
+
+            zoomIn() {
+                this.pdfEngine.zoomIn();
+                this.updateZoomDisplay();
+            }
+            zoomOut() {
+                this.pdfEngine.zoomOut();
+                this.updateZoomDisplay();
+            }
+            updateZoomDisplay() {
+                const zoom = Math.round(this.pdfEngine.scale * 100);
+                document.getElementById('zoomValue').textContent = zoom + '%';
+            }
+
+            prevPage() {
+                this.pdfEngine.prevPage();
+                this.updatePageInfo();
+            }
+            nextPage() {
+                this.pdfEngine.nextPage();
+                this.updatePageInfo();
+            }
+            updatePageInfo() {
+                const current = this.pdfEngine.currentPage;
+                const total = this.pdfEngine.totalPages;
+                document.getElementById('pageInfo').textContent = `Halaman ${current} / ${total}`;
+            }
+
+            async exportPDF() {
+                const redactions = this.redactionTool.getAllBoxes();
+                const highlights = this.highlightTool.getAllHighlights();
+                const images = this.imageTool.getAllImages();
+                const signatures = this.signatureTool.getAllSignatures();
+                const texts = this.textTool.getAllTexts();
+
+                const totalChanges = redactions.length + highlights.length + images.length + signatures.length + texts.length;
+
+                if (totalChanges === 0) {
+                    if (!confirm('Belum ada perubahan. Tetap simpan?')) return;
+                }
+
+                const pdfData = sessionStorage.getItem('pdfData') || localStorage.getItem('pdfData');
+                await this.exporter.exportPDF(pdfData, redactions, highlights, images, signatures, texts, this.rotateCropTool);
+            }
+
+            onKeyDown(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.undo();
+                } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                    e.preventDefault();
+                    this.redo();
+                } else if (e.key === 'Delete') {
+                    if (this.isRedactMode) this.deleteSelectedRedaction();
+                    else if (this.isHighlightMode) this.deleteSelectedHighlight();
+                    else if (this.isImageMode) this.deleteSelectedImage();
+                    else if (this.isSignatureMode) this.deleteSelectedSignature();
+                }
+            }
+
+            showModal(title, message, buttons) {
+                const existing = document.querySelector('.modal-overlay');
+                if (existing) existing.remove();
+
+                const overlay = document.createElement('div');
+                overlay.className = 'modal-overlay';
+
+                const buttonsHTML = buttons.map((btn, i) => {
+                    const className = btn.primary ? 'btn btn-success' : 'btn';
+                    return `<button class="${className}" data-index="${i}">${btn.text}</button>`;
+                }).join('');
+
+                overlay.innerHTML = `
+                    <div class="modal">
+                        <h3>${title}</h3>
+                        <p>${message}</p>
+                        <div class="modal-actions">
+                            ${buttonsHTML}
+                        </div>
+                    </div>
+                `;
+
+                overlay.querySelectorAll('button[data-index]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const idx = parseInt(btn.dataset.index);
+                        overlay.remove();
+                        if (buttons[idx].action) buttons[idx].action();
+                    });
+                });
+
+                document.body.appendChild(overlay);
+            }
+        }
+
+        let editor;
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => { editor = new PDFEditor(); });
+        } else {
+            editor = new PDFEditor();
+        }
+    </script>
+</body>
+</html>
